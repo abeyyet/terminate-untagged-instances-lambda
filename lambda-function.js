@@ -34,15 +34,30 @@ var checkRegion = function(regionName, context) {
         if (err) {
             handleFailure(err, context);
         } else {
+            var untaggedInstanceIds = [];
+
             data.Reservations.forEach(function(reservation) {
                 reservation.Instances.forEach(function(instance) {
                     var instanceId = instance.InstanceId;
 
                     if (instance.State.Name === "running" && instance.Tags.length === 0) {
                         console.log("Instance " + instanceId + " (" + regionName + ") has no tags.");
+                        untaggedInstanceIds.push(instanceId);
                     }
                 })
             });
+
+            if (untaggedInstanceIds.length > 0) {
+                console.log("Terminating " + untaggedInstanceIds.length + " instance(s) in " + regionName);
+
+                ec2.terminateInstances({ "InstanceIds": untaggedInstanceIds }, function(err, data) {
+                    if (err) {
+                        handleFailure(err, context);
+                    } else {
+                        console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
+                    }
+                });
+            }
         }
     });
 }
