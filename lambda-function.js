@@ -2,7 +2,7 @@
 // The idea is to iterate through each region, get the list of instances, identify any with no tags whatsoever, and terminate them.
 // Next step after that would be to send an SNS notification with the list of instance IDs (one notification per region).
 
-var aws = require('aws-sdk');
+var awsPromised = require('aws-promised');
 var https = require('https');
 var url = require('url');
 
@@ -11,29 +11,28 @@ var checkAllRegions = function(event, context) {
         console.log('Received event:', JSON.stringify(event, null, 2));
     }
 
-    var ec2 = new aws.EC2();
-    ec2.describeRegions({}, function(err, data) {
-        if (err) {
-            handleFailure(err, context);
-        } else {
+    var ec2 = awsPromised.ec2();
+    ec2.describeRegionsPromised()
+        .then(function(data) {
             data.Regions.forEach(function(region) {
                 checkRegion(region.RegionName, context);
             });
-        }
-    });
+        }).then(function() {
+            console.log("All done!");
+        }).catch(function(err) {
+            handleFailure(err, context);
+        });
 }
 
 var checkRegion = function(regionName, context) {
     console.log("Processing region: " + regionName);
 
-    var ec2 = new aws.EC2({
+    var ec2 = new awsPromised.ec2({
         "region": regionName
     });
 
-    ec2.describeInstances({}, function(err, data) {
-        if (err) {
-            handleFailure(err, context);
-        } else {
+    ec2.describeInstancesPromised()
+        .then(function(data) {
             var untaggedInstanceIds = [];
 
             data.Reservations.forEach(function(reservation) {
@@ -50,16 +49,20 @@ var checkRegion = function(regionName, context) {
             if (untaggedInstanceIds.length > 0) {
                 console.log("Terminating " + untaggedInstanceIds.length + " instance(s) in " + regionName);
 
-                ec2.terminateInstances({ "InstanceIds": untaggedInstanceIds }, function(err, data) {
-                    if (err) {
-                        handleFailure(err, context);
-                    } else {
+/*
+                ec2.terminateInstancesPromised({ "InstanceIds": untaggedInstanceIds })
+                    .then(function() {
                         console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
-                    }
-                });
+                    }).catch(function(err) {
+                        handleFailure(err, context);
+                    });
+*/
             }
-        }
-    });
+        }).then(function() {
+            console.log("Finished processing region: " + regionName);
+        }).catch(function(err) {
+            handleFailure(err, context);
+        });
 }
 
 var handleFailure = function(err, context) {
