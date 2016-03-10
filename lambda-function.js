@@ -49,14 +49,12 @@ var checkRegion = function(regionName, context) {
             if (untaggedInstanceIds.length > 0) {
                 console.log("Terminating " + untaggedInstanceIds.length + " instance(s) in " + regionName);
 
-/*
                 ec2.terminateInstancesPromised({ "InstanceIds": untaggedInstanceIds })
                     .then(function() {
                         console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
                     }).catch(function(err) {
                         handleFailure(err, context);
                     });
-*/
             }
         }).then(function() {
             console.log("Finished processing region: " + regionName);
