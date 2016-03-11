@@ -1,5 +1,5 @@
 Lambda.zip: lambda-function.js
-	zip -r Lambda lambda-function.js node_modules
+	zip -r Lambda lambda-function.js node_modules --exclude=*aws-sdk*
 
 lambda: Lambda.zip
 
