@@ -1,4 +1,5 @@
 var awsPromised = require('aws-promised');
+var Promise = require('bluebird');
 
 var checkAllRegions = function(event, context) {
     // We'll have an event object if being called from Lambda.
@@ -27,6 +28,11 @@ var checkAllRegions = function(event, context) {
             return Promise.all(checkRegionPromises);
         }).then(function() {
             console.log("All done!");
+
+            // If we're running in Lambda, then call the success handler.
+            if (context) {
+                context.succeed();
+            }
         }).catch(function(err) {
             handleFailure(err, context);
         });
