@@ -1,0 +1,4 @@
+- SNS topic should be a configuration setting that Lambda gets from... somewhere
+- Format the SNS message better, separating out the instances by region
+- Separate Lambda function that listens on the SNS topic and sends notifications to Slack webhook
+- Use CloudTrail to look up whose instance it was?
