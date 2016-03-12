@@ -1,6 +1,8 @@
 var awsPromised = require('aws-promised');
 var Promise = require('bluebird');
 
+var globalUntaggedInstanceIds = [];
+
 var checkAllRegions = function(event, context) {
     // We'll have an event object if being called from Lambda.
     // In our case, nothing interesting will be in it, but log it just the same.
@@ -26,6 +28,9 @@ var checkAllRegions = function(event, context) {
 
             // Get 'em done!
             return Promise.all(checkRegionPromises);
+        }).then(function() {
+            // If we terminated anything, send a notification.
+            return sendNotificationPromised();
         }).then(function() {
             console.log("All done!");
 
@@ -75,11 +80,36 @@ var checkRegionPromised = function(regionName, context) {
                 return ec2.terminateInstancesPromised({ "InstanceIds": untaggedInstanceIds })
                     .then(function() {
                         console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
+
+                        // Add them to our cross-region list.
+                        globalUntaggedInstanceIds = globalUntaggedInstanceIds.concat(untaggedInstanceIds);
                     });
             }
         }).then(function() {
             console.log("Finished processing region: " + regionName);
         });
+}
+
+var sendNotificationPromised = function() {
+    if (globalUntaggedInstanceIds.length > 0) {
+        var sns = awsPromised.sns();
+
+        // TODO: get this from config somehow?
+        var topicArn = "";
+
+        // TODO: break them down by region?
+        var messageText = "The following EC2 instances were terminated, because they had no tags: " + JSON.stringify(globalUntaggedInstanceIds);
+
+        var params = {
+            "TopicArn": topicArn,
+            "Subject": "Terminated un-tagged EC2 instances",
+            "Message": messageText
+        };
+
+        console.log("Publishing notification to " + topicArn);
+
+        return sns.publishPromised(params);
+    }
 }
 
 var handleFailure = function(err, context) {
