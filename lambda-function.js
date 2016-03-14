@@ -1,7 +1,7 @@
 var awsPromised = require('aws-promised');
 var Promise = require('bluebird');
 
-var globalUntaggedInstanceIds = [];
+var props = require("./props.json");
 
 var checkAllRegions = function(event, context) {
     // We'll have an event object if being called from Lambda.
@@ -15,6 +15,9 @@ var checkAllRegions = function(event, context) {
     // environment variables.
     var ec2 = awsPromised.ec2();
 
+    // Create a list to track the terminated instances, across all regions.
+    var terminatedInstanceIds = [];
+
     // We have to iterate through the list of regions and check each independently.
     ec2.describeRegionsPromised()
         .then(function(data) {
@@ -23,14 +26,14 @@ var checkAllRegions = function(event, context) {
 
             // Start/create a promise for each region.
             data.Regions.forEach(function(region) {
-                checkRegionPromises.push(checkRegionPromised(region.RegionName, context));
+                checkRegionPromises.push(checkRegionPromised(region.RegionName, terminatedInstanceIds, context));
             });
 
             // Get 'em done!
             return Promise.all(checkRegionPromises);
         }).then(function() {
             // If we terminated anything, send a notification.
-            return sendNotificationPromised();
+            return sendNotificationPromised(terminatedInstanceIds);
         }).then(function() {
             console.log("All done!");
 
@@ -43,7 +46,7 @@ var checkAllRegions = function(event, context) {
         });
 }
 
-var checkRegionPromised = function(regionName, context) {
+var checkRegionPromised = function(regionName, terminatedInstanceIds, context) {
     console.log("Processing region: " + regionName);
 
     // Create a new promisified EC2 client for this specific region.
@@ -82,7 +85,8 @@ var checkRegionPromised = function(regionName, context) {
                         console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
 
                         // Add them to our cross-region list.
-                        globalUntaggedInstanceIds = globalUntaggedInstanceIds.concat(untaggedInstanceIds);
+                        // See https://davidwalsh.name/merge-arrays-javascript.
+                        Array.prototype.push.apply(terminatedInstanceIds, untaggedInstanceIds);
                     });
             }
         }).then(function() {
@@ -90,25 +94,28 @@ var checkRegionPromised = function(regionName, context) {
         });
 }
 
-var sendNotificationPromised = function() {
-    if (globalUntaggedInstanceIds.length > 0) {
-        var sns = awsPromised.sns();
+var sendNotificationPromised = function(terminatedInstanceIds) {
+    terminatedInstanceIds.push("foo");
+    if (terminatedInstanceIds.length > 0) {
+        if (props && props.sns && props.sns.topicArn) {
+            var sns = awsPromised.sns();
+            var topicArn = props.sns.topicArn;
 
-        // TODO: get this from config somehow?
-        var topicArn = "";
+            console.log("Publishing notification to " + topicArn);
 
-        // TODO: break them down by region?
-        var messageText = "The following EC2 instances were terminated, because they had no tags: " + JSON.stringify(globalUntaggedInstanceIds);
+            // TODO: break them down by region?
+            var messageText = "The following EC2 instances were terminated, because they had no tags: " + JSON.stringify(terminatedInstanceIds);
 
-        var params = {
-            "TopicArn": topicArn,
-            "Subject": "Terminated un-tagged EC2 instances",
-            "Message": messageText
-        };
+            var params = {
+                "TopicArn": topicArn,
+                "Subject": "Terminated un-tagged EC2 instances",
+                "Message": messageText
+            };
 
-        console.log("Publishing notification to " + topicArn);
-
-        return sns.publishPromised(params);
+            return sns.publishPromised(params);
+        } else {
+            console.error("Missing SNS topic ARN in props.json file.");
+        }
     }
 }
 
