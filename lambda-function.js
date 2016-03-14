@@ -80,14 +80,22 @@ var checkRegionPromised = function(regionName, terminatedInstanceIds, context) {
             if (untaggedInstanceIds.length > 0) {
                 console.log("Terminating " + untaggedInstanceIds.length + " instance(s) in " + regionName);
 
-                return ec2.terminateInstancesPromised({ "InstanceIds": untaggedInstanceIds })
-                    .then(function() {
-                        console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
+                // Allow for a "dry run" mode that doesn't actually kill anything.
+                // Use the Boolean() function to handle all the various forms of truthiness.
+                if (props && Boolean(props.dryRun)) {
+                    // Log only.
+                    console.log("Would have terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName + " (dry run)");
+                } else {
+                    // Do it!
+                    return ec2.terminateInstancesPromised({ "InstanceIds": untaggedInstanceIds })
+                        .then(function() {
+                            console.log("Successfully terminated " + untaggedInstanceIds.length + " instance(s) in " + regionName);
 
-                        // Add them to our cross-region list.
-                        // See https://davidwalsh.name/merge-arrays-javascript.
-                        Array.prototype.push.apply(terminatedInstanceIds, untaggedInstanceIds);
-                    });
+                            // Add them to our cross-region list.
+                            // See https://davidwalsh.name/merge-arrays-javascript.
+                            Array.prototype.push.apply(terminatedInstanceIds, untaggedInstanceIds);
+                        });
+                }
             }
         }).then(function() {
             console.log("Finished processing region: " + regionName);
@@ -95,7 +103,6 @@ var checkRegionPromised = function(regionName, terminatedInstanceIds, context) {
 }
 
 var sendNotificationPromised = function(terminatedInstanceIds) {
-    terminatedInstanceIds.push("foo");
     if (terminatedInstanceIds.length > 0) {
         if (props && props.sns && props.sns.topicArn) {
             var sns = awsPromised.sns();
